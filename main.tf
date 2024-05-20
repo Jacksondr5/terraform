@@ -1,6 +1,7 @@
 # Configure the GitHub Provider
 provider "github" {
   owner = "jacksondr5"
+  token = var.gh_token
 }
 
 resource "github_repository" "j5software_com" {
