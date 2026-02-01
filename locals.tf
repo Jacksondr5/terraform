@@ -41,48 +41,48 @@ locals {
 
     "terraform" = {
       description            = "Terraform configuration for managing GitHub repositories"
-      required_status_checks = []
+      required_status_checks = ["CodeRabbit"]
     }
 
     "trade-tracker" = {
       description            = "Trading journal app migrated from monorepo"
       homepage_url           = "https://trade-tracker-pi.vercel.app"
-      required_status_checks = []
+      required_status_checks = ["main", "CodeRabbit"]
     }
 
     "coming-soon" = {
       description            = "Coming soon page template"
       homepage_url           = "https://coming-soon-nu-three.vercel.app"
-      required_status_checks = []
+      required_status_checks = ["main", "CodeRabbit"]
     }
 
     "packing-list" = {
       description            = "Packing list application"
       homepage_url           = "https://packing-list-two.vercel.app"
-      required_status_checks = []
+      required_status_checks = ["main", "CodeRabbit"]
     }
 
     "nx-coordinator" = {
       description            = "NX Coordinator - Pipeline orchestration tool"
-      required_status_checks = []
+      required_status_checks = ["main", "CodeRabbit"]
     }
 
     "todo" = {
       description            = "Todo application"
       homepage_url           = "https://todo.jackson.codes"
-      required_status_checks = []
+      required_status_checks = ["main", "CodeRabbit"]
     }
 
     "hackathon" = {
       description            = "Hackathon voting and coordination app"
       homepage_url           = "https://monorepo-hackathon.vercel.app"
-      required_status_checks = []
+      required_status_checks = ["main", "CodeRabbit"]
     }
 
     "hire" = {
       description            = "Hiring/portfolio site"
       homepage_url           = "https://hire-ebon.vercel.app"
-      required_status_checks = []
+      required_status_checks = ["main", "CodeRabbit"]
     }
   }
 
