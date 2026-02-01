@@ -13,7 +13,6 @@ locals {
     has_issues             = true
     has_discussions        = false
     archive_on_destroy     = true
-    archived               = false
     homepage_url           = null
 
     # Security settings for public repos
@@ -32,13 +31,6 @@ locals {
 
   # Repository definitions - override defaults as needed
   repositories = {
-    "j5software.com" = {
-      description            = "https://j5software.com"
-      homepage_url           = "https://j5software-com.vercel.app"
-      archived               = true
-      required_status_checks = ["pr"]
-    }
-
     "terraform" = {
       description            = "Terraform configuration for managing GitHub repositories"
       required_status_checks = []
