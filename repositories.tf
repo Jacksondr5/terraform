@@ -5,7 +5,6 @@ resource "github_repository" "managed" {
   description  = each.value.description
   visibility   = each.value.visibility
   homepage_url = each.value.homepage_url
-  archived     = each.value.archived
 
   # Merge settings
   allow_squash_merge     = each.value.allow_squash_merge
