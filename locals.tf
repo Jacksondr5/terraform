@@ -38,19 +38,19 @@ locals {
 
     "trade-tracker" = {
       description            = "Trading journal app migrated from monorepo"
-      homepage_url           = "https://trade-tracker-pi.vercel.app"
+      homepage_url           = "https://trade.jackson.codes"
       required_status_checks = ["build", "CodeRabbit"]
     }
 
     "coming-soon" = {
       description            = "Coming soon page template"
-      homepage_url           = "https://coming-soon-nu-three.vercel.app"
+      homepage_url           = "https://jackson.codes"
       required_status_checks = ["build", "CodeRabbit"]
     }
 
     "packing-list" = {
       description            = "Packing list application"
-      homepage_url           = "https://packing-list-two.vercel.app"
+      homepage_url           = "https://packing.jackson.codes"
       required_status_checks = ["build", "CodeRabbit"]
     }
 
@@ -67,13 +67,13 @@ locals {
 
     "hackathon" = {
       description            = "Hackathon voting and coordination app"
-      homepage_url           = "https://monorepo-hackathon.vercel.app"
+      homepage_url           = "https://hackathon.jackson.codes"
       required_status_checks = ["build", "CodeRabbit"]
     }
 
     "hire" = {
-      description            = "Hiring/portfolio site"
-      homepage_url           = "https://hire-ebon.vercel.app"
+      description            = "Site to help track the hiring process"
+      homepage_url           = "https://hire.jackson.codes"
       required_status_checks = ["build", "CodeRabbit"]
     }
   }
