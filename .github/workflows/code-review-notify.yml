@@ -2,27 +2,6 @@ name: Code Review Notification
 
 on:
   workflow_call:
-    inputs:
-      sleep_seconds:
-        description: "Seconds to wait for event debouncing"
-        required: false
-        type: number
-        default: 90
-      notified_reaction:
-        description: "Reaction to mark reviews as notified (GraphQL enum)"
-        required: false
-        type: string
-        default: "EYES"
-      handled_reaction:
-        description: "Reaction that indicates a review has been handled (GraphQL enum)"
-        required: false
-        type: string
-        default: "ROCKET"
-      log_event_payload:
-        description: "Whether to log the full event payload (contains sensitive data)"
-        required: false
-        type: boolean
-        default: false
     secrets:
       DISCORD_WEBHOOK_URL:
         required: true
@@ -30,11 +9,8 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
     steps:
       - name: Log full event payload
-        if: ${{ inputs.log_event_payload }}
         env:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
@@ -45,18 +21,14 @@ jobs:
           echo "::endgroup::"
 
       - name: Wait for events to settle
-        run: sleep ${{ inputs.sleep_seconds }}
+        run: sleep 90
 
       - name: Check for unnotified reviews and notify
         uses: actions/github-script@v7
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          NOTIFIED_REACTION: ${{ inputs.notified_reaction }}
-          HANDLED_REACTION: ${{ inputs.handled_reaction }}
         with:
           script: |
-            const notifiedReaction = process.env.NOTIFIED_REACTION;
-            const handledReaction = process.env.HANDLED_REACTION;
             const event = context.payload;
 
             // Resolve PR number from different event types
@@ -106,19 +78,17 @@ jobs:
             const pr = result.repository.pullRequest;
             const reviews = pr.reviews.nodes;
 
-            // Find reviews that don't have the notified reaction AND don't have the handled reaction
+            // Find reviews that haven't been notified (👀) or handled (🚀)
             const unnotifiedReviews = reviews.filter(review => {
-              // Skip reviews with no body (empty replies, acks)
               if (!review.body || review.body.trim() === '') return false;
 
               const hasNotified = review.reactionGroups.some(
-                g => g.content === notifiedReaction && g.reactors.totalCount > 0
+                g => g.content === 'EYES' && g.reactors.totalCount > 0
               );
               const hasHandled = review.reactionGroups.some(
-                g => g.content === handledReaction && g.reactors.totalCount > 0
+                g => g.content === 'ROCKET' && g.reactors.totalCount > 0
               );
 
-              // Skip if already notified or already handled
               return !hasNotified && !hasHandled;
             });
 
@@ -155,7 +125,7 @@ jobs:
               throw new Error(`Discord webhook failed: ${response.status} ${await response.text()}`);
             }
 
-            // Mark all unnotified reviews with the notified reaction
+            // Mark reviews with 👀
             const addReactionMutation = `
               mutation($subjectId: ID!, $content: ReactionContent!) {
                 addReaction(input: { subjectId: $subjectId, content: $content }) {
@@ -167,9 +137,9 @@ jobs:
             for (const review of unnotifiedReviews) {
               await github.graphql(addReactionMutation, {
                 subjectId: review.id,
-                content: notifiedReaction,
+                content: 'EYES',
               });
-              console.log(`Marked review ${review.databaseId} with ${notifiedReaction}`);
+              console.log(`Marked review ${review.databaseId} with 👀`);
             }
 
             console.log(`Notification sent and ${unnotifiedReviews.length} review(s) marked for ${repo}#${prNumber}`);
