@@ -10,6 +10,8 @@ concurrency:
 
 jobs:
   notify:
+    permissions:
+      pull-requests: write
     uses: ${terraform_repo}/.github/workflows/code-review-notify.yml@main
     secrets:
       DISCORD_WEBHOOK_URL: $${{ secrets.CODE_REVIEW_DISCORD_WEBHOOK }}
