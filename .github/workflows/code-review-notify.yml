@@ -95,7 +95,8 @@ jobs:
             });
 
             const commentSummaries = recentComments.map(c => {
-              const bodyPreview = c.body.substring(0, 150) + (c.body.length > 150 ? '...' : '');
+              const body = c.body || '';
+              const bodyPreview = body.substring(0, 150) + (body.length > 150 ? '...' : '');
               return `**${c.user.login}** on \`${c.path}\`: ${bodyPreview}`;
             });
 
