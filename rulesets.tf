@@ -4,7 +4,7 @@ resource "github_repository_ruleset" "main_branch_protection" {
   name        = "main-branch-protection"
   repository  = github_repository.managed[each.key].name
   target      = "branch"
-  enforcement = "active"
+  enforcement = "disabled"
 
   conditions {
     ref_name {
