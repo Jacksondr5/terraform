@@ -1,0 +1,145 @@
+name: Code Review Notification
+
+on:
+  workflow_call:
+    secrets:
+      DISCORD_WEBHOOK_URL:
+        required: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log full event payload
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_JSON: ${{ toJSON(github.event) }}
+        run: |
+          echo "::group::Event: ${EVENT_NAME} (${EVENT_ACTION})"
+          echo "$EVENT_JSON" | jq .
+          echo "::endgroup::"
+
+      - name: Wait for events to settle
+        run: sleep 90
+
+      - name: Check for unnotified reviews and notify
+        uses: actions/github-script@v7
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        with:
+          script: |
+            const event = context.payload;
+
+            // Resolve PR number from different event types
+            const prNumber = event.pull_request?.number
+              || event.issue?.number
+              || event.review?.pull_request?.number;
+
+            if (!prNumber) {
+              console.log('Could not resolve PR number from event, skipping');
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Fetch reviews with reactions via GraphQL
+            const query = `
+              query($owner: String!, $repo: String!, $pr: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $pr) {
+                    title
+                    url
+                    reviews(first: 100) {
+                      nodes {
+                        id
+                        databaseId
+                        body
+                        state
+                        author { login }
+                        reactionGroups {
+                          content
+                          reactors { totalCount }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            const result = await github.graphql(query, {
+              owner,
+              repo,
+              pr: prNumber,
+            });
+
+            const pr = result.repository.pullRequest;
+            const reviews = pr.reviews.nodes;
+
+            // Find reviews that haven't been notified (👀) or handled (🚀)
+            const unnotifiedReviews = reviews.filter(review => {
+              if (!review.body || review.body.trim() === '') return false;
+
+              const hasNotified = review.reactionGroups.some(
+                g => g.content === 'EYES' && g.reactors.totalCount > 0
+              );
+              const hasHandled = review.reactionGroups.some(
+                g => g.content === 'ROCKET' && g.reactors.totalCount > 0
+              );
+
+              return !hasNotified && !hasHandled;
+            });
+
+            if (unnotifiedReviews.length === 0) {
+              console.log(`No unnotified reviews found for ${repo}#${prNumber}, skipping`);
+              return;
+            }
+
+            console.log(`Found ${unnotifiedReviews.length} unnotified review(s) on ${repo}#${prNumber}`);
+            for (const r of unnotifiedReviews) {
+              console.log(`  - Review ${r.databaseId} by ${r.author?.login || 'unknown'} (${r.state})`);
+            }
+
+            // Send a simple notification to Discord
+            const payload = {
+              embeds: [{
+                title: `🔍 New Code Review Activity`,
+                description: `**[${repo}#${prNumber}](${pr.url})** — ${pr.title}\n\n${unnotifiedReviews.length} review(s) to process.`,
+                color: 0x5865F2,
+                timestamp: new Date().toISOString(),
+                footer: {
+                  text: `${repo} • PR #${prNumber}`,
+                },
+              }],
+            };
+
+            const response = await fetch(process.env.DISCORD_WEBHOOK_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+              throw new Error(`Discord webhook failed: ${response.status} ${await response.text()}`);
+            }
+
+            // Mark reviews with 👀
+            const addReactionMutation = `
+              mutation($subjectId: ID!, $content: ReactionContent!) {
+                addReaction(input: { subjectId: $subjectId, content: $content }) {
+                  reaction { content }
+                }
+              }
+            `;
+
+            for (const review of unnotifiedReviews) {
+              await github.graphql(addReactionMutation, {
+                subjectId: review.id,
+                content: 'EYES',
+              });
+              console.log(`Marked review ${review.databaseId} with 👀`);
+            }
+
+            console.log(`Notification sent and ${unnotifiedReviews.length} review(s) marked for ${repo}#${prNumber}`);
