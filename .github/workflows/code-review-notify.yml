@@ -1,0 +1,147 @@
+name: Code Review Notification
+
+on:
+  workflow_call:
+    inputs:
+      sleep_seconds:
+        description: "Seconds to wait for event debouncing"
+        required: false
+        type: number
+        default: 90
+    secrets:
+      DISCORD_WEBHOOK_URL:
+        required: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log full event payload
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_JSON: ${{ toJSON(github.event) }}
+        run: |
+          echo "::group::Event: ${EVENT_NAME} (${EVENT_ACTION})"
+          echo "$EVENT_JSON" | jq .
+          echo "::endgroup::"
+
+      - name: Wait for events to settle
+        run: sleep ${{ inputs.sleep_seconds }}
+
+      - name: Collect PR state and notify
+        uses: actions/github-script@v7
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        with:
+          script: |
+            const event = context.payload;
+
+            // Resolve PR number from different event types
+            const prNumber = event.pull_request?.number
+              || event.issue?.number
+              || event.review?.pull_request?.number;
+
+            if (!prNumber) {
+              console.log('Could not resolve PR number from event, skipping');
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Fetch the PR details
+            const { data: pr } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber,
+            });
+
+            // Fetch all reviews
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner,
+              repo,
+              pull_number: prNumber,
+              per_page: 100,
+            });
+
+            // Fetch review comments (inline code comments)
+            const { data: reviewComments } = await github.rest.pulls.listReviewComments({
+              owner,
+              repo,
+              pull_number: prNumber,
+              per_page: 100,
+              sort: 'created',
+              direction: 'desc',
+            });
+
+            // Filter to recent activity (last 10 minutes to capture the batch)
+            const cutoff = new Date(Date.now() - 10 * 60 * 1000);
+
+            const recentReviews = reviews.filter(r =>
+              new Date(r.submitted_at) > cutoff
+            );
+            const recentComments = reviewComments.filter(c =>
+              new Date(c.created_at) > cutoff
+            );
+
+            // Build a summary
+            const reviewSummaries = recentReviews.map(r => {
+              const state = r.state.toLowerCase().replace('_', ' ');
+              const bodyPreview = r.body
+                ? r.body.substring(0, 200) + (r.body.length > 200 ? '...' : '')
+                : '(no body)';
+              return `**${r.user.login}** ${state}: ${bodyPreview}`;
+            });
+
+            const commentSummaries = recentComments.map(c => {
+              const bodyPreview = c.body.substring(0, 150) + (c.body.length > 150 ? '...' : '');
+              return `**${c.user.login}** on \`${c.path}\`: ${bodyPreview}`;
+            });
+
+            if (recentReviews.length === 0 && recentComments.length === 0) {
+              console.log('No recent review activity found, skipping notification');
+              return;
+            }
+
+            // Build Discord message
+            let description = `**[${repo}#${prNumber}](${pr.html_url})** — ${pr.title}\n\n`;
+
+            if (reviewSummaries.length > 0) {
+              description += `**Reviews (${recentReviews.length}):**\n${reviewSummaries.join('\n')}\n\n`;
+            }
+
+            if (commentSummaries.length > 0) {
+              description += `**Inline Comments (${recentComments.length}):**\n${commentSummaries.join('\n')}\n\n`;
+            }
+
+            // Total counts for context
+            const totalPendingReviews = reviews.filter(r => r.state === 'CHANGES_REQUESTED').length;
+            if (totalPendingReviews > 0) {
+              description += `⚠️ ${totalPendingReviews} review(s) requesting changes total on this PR`;
+            }
+
+            // Send to Discord
+            const payload = {
+              embeds: [{
+                title: `🔍 Code Review Activity`,
+                description: description.substring(0, 4000),
+                color: 0x5865F2,
+                timestamp: new Date().toISOString(),
+                footer: {
+                  text: `${repo} • PR #${prNumber}`,
+                },
+              }],
+            };
+
+            const response = await fetch(process.env.DISCORD_WEBHOOK_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+              throw new Error(`Discord webhook failed: ${response.status} ${await response.text()}`);
+            }
+
+            console.log(`Notification sent for ${repo}#${prNumber}: ${recentReviews.length} reviews, ${recentComments.length} comments`);
