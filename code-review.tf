@@ -21,4 +21,6 @@ resource "github_repository_file" "code_review_caller_workflow" {
   commit_author       = "Kai"
   commit_email        = "Kai@jackson.codes"
   overwrite_on_create = true
+
+  depends_on = [github_repository_ruleset.main_branch_protection]
 }
