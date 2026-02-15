@@ -9,10 +9,15 @@ on:
         type: number
         default: 90
       notified_reaction:
-        description: "Reaction to mark comments as notified"
+        description: "Reaction to mark reviews as notified (GraphQL enum)"
         required: false
         type: string
-        default: "eyes"
+        default: "EYES"
+      handled_reaction:
+        description: "Reaction that indicates a review has been handled (GraphQL enum)"
+        required: false
+        type: string
+        default: "ROCKET"
     secrets:
       DISCORD_WEBHOOK_URL:
         required: true
@@ -39,10 +44,12 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           NOTIFIED_REACTION: ${{ inputs.notified_reaction }}
+          HANDLED_REACTION: ${{ inputs.handled_reaction }}
         with:
           script: |
-            const event = context.payload;
             const notifiedReaction = process.env.NOTIFIED_REACTION;
+            const handledReaction = process.env.HANDLED_REACTION;
+            const event = context.payload;
 
             // Resolve PR number from different event types
             const prNumber = event.pull_request?.number
@@ -57,49 +64,71 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
-            // Fetch the PR details
-            const { data: pr } = await github.rest.pulls.get({
-              owner,
-              repo,
-              pull_number: prNumber,
-            });
-
-            // Fetch all review comments (inline code comments)
-            const { data: reviewComments } = await github.rest.pulls.listReviewComments({
-              owner,
-              repo,
-              pull_number: prNumber,
-              per_page: 100,
-            });
-
-            // Find comments that haven't been marked with the notified reaction
-            const unnotifiedComments = [];
-            for (const comment of reviewComments) {
-              const { data: reactions } = await github.rest.reactions.listForPullRequestReviewComment({
-                owner,
-                repo,
-                comment_id: comment.id,
-              });
-
-              const hasNotifiedReaction = reactions.some(r => r.content === notifiedReaction);
-              if (!hasNotifiedReaction) {
-                unnotifiedComments.push(comment);
+            // Fetch reviews with reactions via GraphQL
+            const query = `
+              query($owner: String!, $repo: String!, $pr: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $pr) {
+                    title
+                    url
+                    reviews(first: 100) {
+                      nodes {
+                        id
+                        databaseId
+                        body
+                        state
+                        author { login }
+                        reactionGroups {
+                          content
+                          reactors { totalCount }
+                        }
+                      }
+                    }
+                  }
+                }
               }
-            }
+            `;
 
-            if (unnotifiedComments.length === 0) {
-              console.log(`No unnotified review comments found for ${repo}#${prNumber}, skipping`);
+            const result = await github.graphql(query, {
+              owner,
+              repo,
+              pr: prNumber,
+            });
+
+            const pr = result.repository.pullRequest;
+            const reviews = pr.reviews.nodes;
+
+            // Find reviews that don't have the notified reaction AND don't have the handled reaction
+            const unnotifiedReviews = reviews.filter(review => {
+              // Skip reviews with no body (empty replies, acks)
+              if (!review.body || review.body.trim() === '') return false;
+
+              const hasNotified = review.reactionGroups.some(
+                g => g.content === notifiedReaction && g.reactors.totalCount > 0
+              );
+              const hasHandled = review.reactionGroups.some(
+                g => g.content === handledReaction && g.reactors.totalCount > 0
+              );
+
+              // Skip if already notified or already handled
+              return !hasNotified && !hasHandled;
+            });
+
+            if (unnotifiedReviews.length === 0) {
+              console.log(`No unnotified reviews found for ${repo}#${prNumber}, skipping`);
               return;
             }
 
-            console.log(`Found ${unnotifiedComments.length} unnotified comment(s) on ${repo}#${prNumber}`);
+            console.log(`Found ${unnotifiedReviews.length} unnotified review(s) on ${repo}#${prNumber}`);
+            for (const r of unnotifiedReviews) {
+              console.log(`  - Review ${r.databaseId} by ${r.author?.login || 'unknown'} (${r.state})`);
+            }
 
-            // Send a simple notification to Discord — the code-reviewer agent
-            // will independently fetch all review details
+            // Send a simple notification to Discord
             const payload = {
               embeds: [{
                 title: `🔍 New Code Review Activity`,
-                description: `**[${repo}#${prNumber}](${pr.html_url})** — ${pr.title}\n\n${unnotifiedComments.length} new review comment(s) to process.`,
+                description: `**[${repo}#${prNumber}](${pr.url})** — ${pr.title}\n\n${unnotifiedReviews.length} review(s) to process.`,
                 color: 0x5865F2,
                 timestamp: new Date().toISOString(),
                 footer: {
@@ -118,15 +147,21 @@ jobs:
               throw new Error(`Discord webhook failed: ${response.status} ${await response.text()}`);
             }
 
-            // Mark all unnotified comments with the notified reaction
-            for (const comment of unnotifiedComments) {
-              await github.rest.reactions.createForPullRequestReviewComment({
-                owner,
-                repo,
-                comment_id: comment.id,
+            // Mark all unnotified reviews with the notified reaction
+            const addReactionMutation = `
+              mutation($subjectId: ID!, $content: ReactionContent!) {
+                addReaction(input: { subjectId: $subjectId, content: $content }) {
+                  reaction { content }
+                }
+              }
+            `;
+
+            for (const review of unnotifiedReviews) {
+              await github.graphql(addReactionMutation, {
+                subjectId: review.id,
                 content: notifiedReaction,
               });
-              console.log(`Marked comment ${comment.id} with ${notifiedReaction}`);
+              console.log(`Marked review ${review.databaseId} with ${notifiedReaction}`);
             }
 
-            console.log(`Notification sent and ${unnotifiedComments.length} comment(s) marked for ${repo}#${prNumber}`);
+            console.log(`Notification sent and ${unnotifiedReviews.length} review(s) marked for ${repo}#${prNumber}`);
