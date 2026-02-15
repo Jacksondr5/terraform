@@ -3,8 +3,6 @@ name: Code Review Notification
 on:
   pull_request_review:
     types: [submitted]
-  pull_request_review_comment:
-    types: [created]
 
 concurrency:
   group: code-review-$${{ github.event.pull_request.number || github.event.issue.number }}

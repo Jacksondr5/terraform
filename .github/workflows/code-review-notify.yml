@@ -18,6 +18,11 @@ on:
         required: false
         type: string
         default: "ROCKET"
+      log_event_payload:
+        description: "Whether to log the full event payload (contains sensitive data)"
+        required: false
+        type: boolean
+        default: false
     secrets:
       DISCORD_WEBHOOK_URL:
         required: true
@@ -25,8 +30,11 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - name: Log full event payload
+        if: ${{ inputs.log_event_payload }}
         env:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
