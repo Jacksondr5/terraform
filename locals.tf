@@ -80,6 +80,11 @@ locals {
       code_review_notifications = true
     }
 
+    "meatnet-client" = {
+      description            = "Meatnet client application"
+      required_status_checks = ["build", "CodeRabbit"]
+    }
+
     "hire" = {
       description            = "Site to help track the hiring process"
       homepage_url           = "https://hire.jackson.codes"
