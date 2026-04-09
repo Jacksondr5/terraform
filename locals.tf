@@ -33,7 +33,7 @@ locals {
   repositories = {
     "terraform" = {
       description            = "Terraform configuration for managing GitHub repositories"
-      required_status_checks = ["CodeRabbit"]
+      required_status_checks = ["CodeRabbit", "Terraform Cloud/jacksondr5/repo-id-UyFU3bHZg9vBYx4U"]
     }
 
     "temporal" = {
