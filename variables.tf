@@ -10,9 +10,3 @@ variable "ruleset_enforcement" {
     error_message = "ruleset_enforcement must be \"active\", \"disabled\", or \"evaluate\"."
   }
 }
-
-variable "discord_webhook_url" {
-  description = "Discord webhook URL for code review notifications channel"
-  type        = string
-  sensitive   = true
-}
