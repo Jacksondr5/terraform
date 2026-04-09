@@ -44,7 +44,7 @@ locals {
     "trade-tracker" = {
       description            = "Trading journal app migrated from monorepo"
       homepage_url           = "https://trade.jackson.codes"
-      required_status_checks = ["build", "CodeRabbit"]
+      required_status_checks = ["build", "CodeRabbit", "Vercel - preview-e2e-preview"]
     }
 
     "coming-soon" = {
