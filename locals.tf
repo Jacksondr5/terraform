@@ -76,6 +76,11 @@ locals {
       required_status_checks = ["build", "CodeRabbit"]
     }
 
+    "meatnet-client" = {
+      description            = "Meatnet client application"
+      required_status_checks = ["build", "CodeRabbit"]
+    }
+
     "hire" = {
       description            = "Site to help track the hiring process"
       homepage_url           = "https://hire.jackson.codes"
